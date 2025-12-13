@@ -46,9 +46,12 @@ tic_tac_toe/
 
 # 🎯 как запустить
 ```
-git clone 
-python Full_project.py
+- git clone https://github.com/Gooolevev/tic_tac_toe_project.git
+cd tic_tac_toe_project
+
+- python Full_project.py
 ```
+
 
 
 
