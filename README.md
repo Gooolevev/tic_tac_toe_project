@@ -45,9 +45,11 @@ tic_tac_toe/
 
 
 # 🎯 как запустить
-Bash```
-python main.py
 ```
+git clone 
+python Full_project.py
+```
+
 
 
 
