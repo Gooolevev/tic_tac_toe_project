@@ -45,8 +45,9 @@ tic_tac_toe/
 
 
 # 🎯 как запустить
-Bash '''
+Bash```
 python main.py
-'''
+```
+
 
 
