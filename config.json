@@ -1,0 +1,17 @@
+{
+  "field_settings": {
+    "y_size": 3,
+    "x_size": 3
+  },
+  "player1_settings": {
+    "name": "БОБ",
+    "symbol": "X",
+    "type": "human" 
+  },
+  "player2_settings": {
+    "name": "БОТ",
+    "symbol": "O",
+    "type": "bot" 
+  },
+  "starting_player_symbol": "X"
+}

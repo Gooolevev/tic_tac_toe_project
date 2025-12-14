@@ -3,51 +3,98 @@ from .logic import Field
 from .players import HumanPlayer, BotPlayer
 import sys
 import os
+from .render import GameRenderer
+import json
+
+
+class ConfigLoader:
+    def __init__(self, filename="config.json"):
+        self.config = self._load_config(filename)
+
+    def _load_config(self, filename):
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print(f"Ошибка: Файл конфигурации '{filename}' не найден.")
+            sys.exit()
+        except json.JSONDecodeError:
+            print(f"Ошибка: Некорректный формат JSON в файле '{filename}'.")
+            sys.exit()
+
+    def get_field_size(self):
+        settings = self.config.get("field_settings", {})
+        return settings.get("y_size", 3), settings.get("x_size", 3)
+
+    def get_player_data(self, player_key):
+        return self.config.get(player_key, {})
+
+    def get_starting_player_symbol(self):
+        return self.config.get("starting_player_symbol", "X")
+
+
 
 class Game:
-    def __init__(self):
-        self.field = Field()
-        loaded = self.field.load_config()
-
-        if loaded:
-            p1_name, p1_sym, p2_name, p2_sym, curr_p = loaded
+    def __init__(self, load_saved=False):
+        # 1. Загрузка конфигурации
+        config_loader = ConfigLoader()
+        
+        y_size, x_size = config_loader.get_field_size()
+        p1_data = config_loader.get_player_data("player1_settings")
+        p2_data = config_loader.get_player_data("player2_settings")
+        
+        default_p1_name, default_p1_sym = p1_data.get('name', 'Игрок 1'), p1_data.get('symbol', 'X')
+        default_p2_name, default_p2_sym = p2_data.get('name', 'БОТ'), p2_data.get('symbol', 'O')
+        default_p2_type = p2_data.get('type', 'bot').lower()
+        
+        curr_p = config_loader.get_starting_player_symbol()
+        
+        if load_saved and os.path.exists("game_state.json"):
+            self.field = Field()
+            loaded = self.field.load_config()
+            if loaded:
+                p1_name, p1_sym, p2_name, p2_sym, curr_p = loaded
+            else:
+                self.field = Field(y_size, x_size)
+                p1_name, p1_sym = default_p1_name, default_p1_sym
+                p2_name, p2_sym = default_p2_name, default_p2_sym
         else:
-            self.field = Field(3, 3)
-            p1_name, p1_sym = "Игрок", "X"
-            p2_name, p2_sym = "БОТ", "O"
-            curr_p = "X"
+            self.field = Field(y_size, x_size)
+            p1_name, p1_sym = default_p1_name, default_p1_sym
+            p2_name, p2_sym = default_p2_name, default_p2_sym
 
         self.player1 = HumanPlayer(p1_name, p1_sym)
-        if p2_name == "БОТ":
+        
+        if default_p2_type == "bot":
             self.player2 = BotPlayer(p2_name, p2_sym)
-        else:
+        elif default_p2_type == "human":
             self.player2 = HumanPlayer(p2_name, p2_sym)
+        else:
+            self.player2 = HumanPlayer(p2_name, p2_sym) 
 
         self.current_player = self.player1 if curr_p == p1_sym else self.player2
 
-
         self.game_over = False
         self.winner = None
-        self.cell_size = 100
-        self.margin = 10
-        self.width = self.field.x_size * (self.cell_size + self.margin) + self.margin
-        self.height = self.field.y_size * (self.cell_size + self.margin) + self.margin + 40
-        self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Крестики-нолики")
-        self.font = pygame.font.SysFont("Arial", 50, bold=True)
-        self.info_font = pygame.font.SysFont("Arial", 28, bold=True)
-    
+
+        self.renderer = GameRenderer(self.field.x_size, self.field.y_size)
 
     def switch_player(self):
         self.current_player = self.player2 if self.current_player == self.player1 else self.player1
 
-    def handle_click(self, mouse_pos):
-        x, y = mouse_pos
-        if y > self.height - 40:
-            return
+    def check_game_state(self):
+        if self.field.has_winner(self.current_player.symbol):
+            self.game_over = True
+            self.winner = self.current_player.name
+        elif self.field.is_draw():
+            self.game_over = True
+            self.winner = None 
 
-        col = (x - self.margin) // (self.cell_size + self.margin)
-        row = (y - self.margin) // (self.cell_size + self.margin)
+    def handle_click(self, mouse_pos):
+        row, col = self.renderer.get_grid_coordinates(mouse_pos)
+
+        if row is None or col is None:
+            return
 
         if row < 0 or row >= self.field.y_size or col < 0 or col >= self.field.x_size:
             return
@@ -66,7 +113,6 @@ class Game:
                 if isinstance(self.current_player, BotPlayer):
                     pygame.time.set_timer(pygame.USEREVENT, 500)
             
-
     def make_bot_move(self):
         move = self.current_player.get_move(self.field)
         self.field.make_move(move, self.current_player.symbol)
@@ -108,50 +154,10 @@ class Game:
                         new_game.run()
                         return
 
-            self.draw()
-            pygame.display.flip() #показать всё, что нарисовал
+            self.renderer.draw(self.field, self.game_over, self.winner, self.current_player)
+            
+            pygame.display.flip()
             clock.tick(60)
 
         pygame.quit()
         sys.exit()
-
-    def check_game_state(self):
-        if self.field.has_winner(self.current_player.symbol):
-            self.game_over = True
-            self.winner = self.current_player.name
-        elif self.field.is_draw():
-            self.game_over = True
-            self.winner = None 
-
-    def draw(self):
-        self.screen.fill((170, 110, 70))
-
-        for row in range(self.field.y_size):
-            for col in range(self.field.x_size):
-                x = self.margin + col * (self.cell_size + self.margin)
-                y = self.margin + row * (self.cell_size + self.margin)
-                rect = pygame.Rect(x, y, self.cell_size, self.cell_size)
-                pygame.draw.rect(self.screen, (220, 160, 120), rect)
-                pygame.draw.rect(self.screen, (0, 0, 0), rect, 3)
-
-                symbol = self.field.grid[row][col].symbol
-                if symbol != " ":
-                    color = (255, 248, 220) if symbol == "X" else (100, 50, 40)
-                    text = self.font.render(symbol, True, color)
-                    text_rect = text.get_rect(center=rect.center)
-                    self.screen.blit(text, text_rect)
-    
-        panel_height = 40
-        panel_y = self.height - panel_height
-        pygame.draw.rect(self.screen, (250, 250, 250), (0, panel_y, self.width, panel_height))
-        if self.game_over:
-            if self.winner:
-                msg = f"Победил {self.winner}!"
-            else:
-                msg = "Ничья!"
-        else:
-            msg = f"Ход: {self.current_player.name} ({self.current_player.symbol})"
-
-        info = self.info_font.render(msg, True, (0, 0, 0))
-        info_rect = info.get_rect(center=(self.width // 2, panel_y + panel_height // 2))
-        self.screen.blit(info, info_rect)
